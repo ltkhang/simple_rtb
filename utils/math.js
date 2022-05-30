@@ -3,6 +3,7 @@ const getRandomFloat = (min, max, decimals) => {
     return parseFloat(str);
 }
 
+
 module.exports = {getRandomFloat}
 
 

@@ -43,6 +43,12 @@ const notifyWinBidSchemaCheck = {
             options: {min: 1}
         },
     },
+    request_id: {
+        isLength: {
+            errorMessage: 'request_id must not empty',
+            options: {min: 1}
+        },
+    },
     user_id: {
         isLength: {
             errorMessage: 'user_id must not empty',
@@ -52,7 +58,7 @@ const notifyWinBidSchemaCheck = {
     clear_price: {
         isFloat: {
             options: [{
-                min: 0
+                min: -1
             }],
             errorMessage: 'clear_price must be greater or equal 0'
         },

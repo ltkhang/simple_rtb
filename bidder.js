@@ -2,10 +2,8 @@ const express = require('express')
 const cors = require('cors')
 const { checkSchema, validationResult, check } = require('express-validator');
 const {bidderValidation, generalValidation} = require('./validation')
-const {mathUtil} = require('./utils')
+const {mathUtil, constants} = require('./utils')
 const myArgs = process.argv.slice(2)
-
-const DEFAULT_BID = mathUtil.getRandomFloat()
 
 // Check if PORT provided correctly
 if (myArgs.length != 1) {
@@ -41,11 +39,22 @@ app.post('/init_session',
     (req, res) => {
         const errors = validationResult(req);
         if (!errors.isEmpty()) {
-          return res.status(400).json({error: errors.array() });
+          return res.status(constants.STATUS_ERR).json({error: errors.array() });
         }
         let session_id = req.body.session_id
+        let estimated_traffic = req.body.estimated_traffic
+        let budget = req.body.budget
+        let impression_goal = req.body.impression_goal
         if (!(session_id in session_db)){
-            session_db[session_id] = {}
+            session_db[session_id] = {
+                estimated_traffic,
+                budget,
+                impression_goal,
+                users: {},
+                total_spending: 0,
+                impression_count: 0,
+                request_list: {}
+            }
         }
 
         return res.json({result: 'ok'})
@@ -56,7 +65,7 @@ app.post('/end_session',
     (req, res) => {
         const errors = validationResult(req);
         if (!errors.isEmpty()) {
-          return res.status(400).json({error: errors.array() });
+          return res.status(constants.STATUS_ERR).json({error: errors.array() });
         }
         let session_id = req.body.session_id
         delete session_db[session_id]
@@ -68,7 +77,7 @@ app.post('/bid_request',
     (req, res) => {
         const errors = validationResult(req);
         if (!errors.isEmpty()) {
-            return res.status(400).json({error: errors.array() });
+            return res.status(constants.STATUS_ERR).json({error: errors.array() });
         }
         let session_id = req.body.session_id
         let request_id = req.body.request_id
@@ -78,17 +87,41 @@ app.post('/bid_request',
         let price = 0
         // check if session_id has been initialized
         if (!(session_id in session_db)){
-            return res.status(400).json({error: 'session_id has not been initialized'})
+            return res.status(constants.STATUS_ERR).json({error: 'session_id has not been initialized'})
         }
+
         // store the information of user
-        if (!(user_id in session_db[session_id])){
-            session_db[session_id][user_id] = {}
+        if (!(user_id in session_db[session_id].users)){
+            session_db[session_id].users[user_id] = {}
         }
+        let estimated_traffic = session_db[session_id].estimated_traffic
+        let budget = session_db[session_id].budget
+        let impression_goal = session_db[session_id].impression_goal
+        let total_spending = session_db[session_id].total_spending
+        let impression_count = session_db[session_id].impression_count
+
+        let estimated_number_of_bidder = estimated_traffic / impression_goal
+
+        // divide remain budget for remain impression
+        let valuation = (budget - total_spending) / (impression_goal - impression_count)
+        // bid half of floor_price, ref: https://en.wikipedia.org/wiki/First-price_sealed-bid_auction
+        if (valuation / 2 > floor_price){
+            price = valuation / 2
+        } else { // or bid based on theory, ref: https://python.quantecon.org/two_auctions.html
+            price = (valuation * (estimated_number_of_bidder - 1)) / estimated_number_of_bidder 
+            price = price.toFixed(constants.DEXIMALS)
+        }
+        if (price < floor_price){
+            price = -1 // no bid
+        }
+
+        session_db[session_id].request_list[request_id] = {price}
 
         return res.json({
             session_id,
             request_id,
-            price
+            price,
+            session_db
         })
 })
 
@@ -97,9 +130,27 @@ app.post('/notify_win_bid',
     (req, res) => {
         const errors = validationResult(req);
         if (!errors.isEmpty()) {
-        return res.status(400).json({error: errors.array() });
+        return res.status(constants.STATUS_ERR).json({error: errors.array() });
         }
-        res.end(JSON.stringify({result: 'ok'}))
+        let session_id = req.body.session_id
+        let request_id = req.body.request_id
+        let clear_price = req.body.clear_price
+        // check if session_id has been initialized
+        if (!(session_id in session_db)){
+            return res.status(constants.STATUS_ERR).json({error: 'session_id has not been initialized'})
+        }
+        if (!(request_id in session_db[session_id].request_list)){
+            return res.status(constants.STATUS_ERR).json({error: 'request_id has not been initialized'})
+        }
+        let price = parseFloat(session_db[session_id].request_list[request_id].price)
+        if (price != -1){
+            if (price == clear_price){
+                session_db[session_id].impression_count += 1
+                session_db[session_id].total_spending += clear_price
+            }
+        }
+        isEqual = price == clear_price
+        return res.json({result: 'ok', session_db, price, clear_price, isEqual})
 })
 
 app.listen(port, () => {
