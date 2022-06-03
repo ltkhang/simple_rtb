@@ -96,23 +96,108 @@ app.post('/end_session',
 
 app.post('/bid_request',
     checkSchema(generalValidation.bidRequestSchemaCheck),
-    (req, res) => {
+    async (req, res) => {
         const errors = validationResult(req);
         if (!errors.isEmpty()) {
             return res.status(400).json({ error: errors.array() });
         }
         let session_id = req.body.session_id
-        let request_id = req.body.request_id
-        let win_bid = {
-            name: "",
-            price: 0
+        if (!(session_id in session_db)) {
+            return res.status(400).json({ error: `session_id ${session_id} has not initialized` });
         }
-        let bid_responses = [
-            {
-                name: "",
-                price: 0
+
+        let floor_price = req.body.floor_price
+        let timeout_ms = req.body.timeout_ms
+        
+        let user_id = req.body.user_id
+        let request_id = req.body.request_id
+        let bidders = session_db[session_id]['bidders']
+
+
+        // inject response time: https://stackoverflow.com/a/59885486
+        const instance = axios.create()
+        instance.interceptors.request.use((config) => {
+            config.headers['request-startTime'] = process.hrtime()
+            return config
+        })
+        
+        instance.interceptors.response.use((response) => {
+            const start = response.config.headers['request-startTime']
+            const end = process.hrtime(start)
+            const milliseconds = Math.round((end[0] * 1000) + (end[1] / 1000000))
+            response.headers['request-duration'] = milliseconds
+            return response
+        })
+
+        let endpoints = []
+            bidders.forEach(bidder => {
+                let route = 'bid_request'
+                if (bidder.endpoint[bidder.endpoint.length - 1] != '/')
+                    route = '/' + route
+                endpoints.push(bidder.endpoint + route)
+            });
+            const http_result = await Promise.allSettled(
+                endpoints.map((endpoint) => {
+                    return instance.post(endpoint, {
+                        floor_price,
+                        timeout_ms,
+                        session_id,
+                        user_id,
+                        request_id
+                    }, { timeout: timeout_ms }
+                    )
+                }
+                )
+            )
+            let winner = 0
+            let price = -1
+            let min_response = 0
+            let bid_responses = [] 
+            for (let i = 0; i < http_result.length; i++){
+                result = http_result[i]
+                if (result.status == 'fulfilled')
+                    if (result.value.status == constants.STATUS_OK){
+                        let bidder_name = bidders[i]['name']
+                        let bidder_price = result.value.data.price
+                        let bidder_response_time = result.value.headers['request-duration']
+                        
+                        if (bidder_price > -1){
+                            bid_responses.push({
+                                name: bidder_name,
+                                price: bidder_price
+                            })
+
+                            if ((bidder_price > price) || (bidder_price == price && bidder_response_time < min_response)){
+                                winner = i
+                                price = bidder_price
+                                min_response = bidder_response_time
+                            }
+                        }
+                    }
             }
-        ]
+
+        let name = ""
+        if (price > -1){
+            name = bidders[winner]['name']
+            let endpoint = bidders[winner]['endpoint']
+            let route = 'notify_win_bid'
+            if (endpoint[endpoint.length - 1] != '/')
+                route = '/' + route
+            endpoint = endpoint + route
+            try {
+                await axios.post(endpoint, {
+                    session_id,
+                    request_id,
+                    clear_price: price
+                }, {timeout: constants.DEFAULT_TIMEOUT})
+            } catch {
+                
+            }
+        }
+        let win_bid = {
+            name,
+            price
+        }
         return res.json({
             session_id,
             request_id,

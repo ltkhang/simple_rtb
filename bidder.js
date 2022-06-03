@@ -112,8 +112,7 @@ app.post('/bid_request',
         // ref: https://www.youtube.com/watch?v=MROR272191E
         price = (valuation * (estimated_number_of_bidder - 1)) / estimated_number_of_bidder
         price = parseFloat(price.toFixed(constants.DEXIMALS))
-
-        if (price < floor_price) {
+        if (isNaN(price) || !isFinite(price) || price < floor_price) {
             price = -1 // no bid
         }
 
@@ -149,6 +148,7 @@ app.post('/notify_win_bid',
             session_db[session_id].impression_count += 1
             session_db[session_id].total_spending += clear_price
         }
+        // console.log(`${request_id} I win with ${clear_price}, total_spending ${session_db[session_id].total_spending}`)
         return res.json({ result: 'ok' })
     })
 
