@@ -6,8 +6,18 @@
   "author": "Tan-Khang Luong",
   "license": "MIT",
   "dependencies": {
+    "axios": "^0.27.2",
     "cors": "^2.8.5",
     "express": "^4.18.1",
-    "express-validator": "^6.14.1"
+    "express-validator": "^6.14.1",
+    "promise.allsettled": "^1.0.5"
+  },
+  "scripts": {
+    "test": "jest --watchAll"
+  },
+  "devDependencies": {
+    "async": "^3.2.3",
+    "jest": "^28.1.0",
+    "supertest": "^6.2.3"
   }
 }

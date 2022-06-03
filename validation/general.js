@@ -1,12 +1,12 @@
 const errorHandler = (err, req, res, next) => {
-    res.end(JSON.stringify({error: err.message}))
+    res.end(JSON.stringify({ error: err.message }))
 }
 
 const endSessionSchemaCheck = {
     session_id: {
         isLength: {
             errorMessage: 'session_id must not empty',
-            options: {min: 1}
+            options: { min: 1 }
         },
     }
 }
@@ -32,21 +32,22 @@ const bidRequestSchemaCheck = {
     session_id: {
         isLength: {
             errorMessage: 'session_id must not empty',
-            options: {min: 1}
+            options: { min: 1 }
         },
     },
     user_id: {
         isLength: {
             errorMessage: 'user_id must not empty',
-            options: {min: 1}
+            options: { min: 1 }
         },
     },
     request_id: {
         isLength: {
             errorMessage: 'request_id must not empty',
-            options: {min: 1}
+            options: { min: 1 }
         },
     },
 }
 
-module.exports = {errorHandler, endSessionSchemaCheck, bidRequestSchemaCheck}
+
+module.exports = { errorHandler, endSessionSchemaCheck, bidRequestSchemaCheck }
