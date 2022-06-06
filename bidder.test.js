@@ -1,14 +1,16 @@
 const request = require('supertest')
 const async = require('async')
 const bidder = require('./bidder')
+const { mathUtil } = require('./utils')
 
 describe('Bidder test', () => {
     const agent = request.agent(bidder)
     it('POST init_session -> ok', async () => {
+        session_id = mathUtil.getRandomInt(10000, 20000)
         return agent
             .post('/init_session')
             .send({
-                'session_id': 1234,
+                'session_id': session_id,
                 'estimated_traffic': 100,
                 'budget': 100000,
                 'impression_goal': 10
@@ -21,6 +23,20 @@ describe('Bidder test', () => {
                         result: 'ok'
                     })
                 )
+                agent
+                    .post('/end_session')
+                    .send({
+                        'session_id': session_id
+                    })
+                    .expect('Content-Type', /json/)
+                    .expect(200)
+                    .then((response) => {
+                        expect(response.body).toEqual(
+                            expect.objectContaining({
+                                result: 'ok'
+                            })
+                        )
+                    })
             })
     })
 
@@ -39,7 +55,7 @@ describe('Bidder test', () => {
             absentEstimatedTraffic: (cb) => {
                 agent.post('/init_session')
                     .send({
-                        'session_id': 1234,
+                        'session_id': mathUtil.getRandomInt(10000, 20000),
                         'budget': 100000,
                         'impression_goal': 10
                     })
@@ -49,7 +65,7 @@ describe('Bidder test', () => {
             budgetLessThanZero: (cb) => {
                 agent.post('/init_session')
                     .send({
-                        'session_id': 1234,
+                        'session_id': mathUtil.getRandomInt(10000, 20000),
                         'estimated_traffic': 100,
                         'budget': -1,
                         'impression_goal': 10
@@ -60,7 +76,7 @@ describe('Bidder test', () => {
             impressionGoalOverMax: (cb) => {
                 agent.post('/init_session')
                     .send({
-                        'session_id': 1234,
+                        'session_id': mathUtil.getRandomInt(10000, 20000),
                         'estimated_traffic': 100,
                         'budget': 0,
                         'impression_goal': 1000001
@@ -79,7 +95,7 @@ describe('Bidder test', () => {
         return agent
             .post('/end_session')
             .send({
-                'session_id': 1234
+                'session_id': mathUtil.getRandomInt(10000, 20000)
             })
             .expect('Content-Type', /json/)
             .expect(200)
@@ -93,10 +109,11 @@ describe('Bidder test', () => {
     })
 
     it('POST init_session -> bid_request -> ok', async () => {
+        session_id = mathUtil.getRandomInt(10000, 20000)
         return agent
             .post('/init_session')
             .send({
-                'session_id': 1234,
+                'session_id': session_id,
                 'estimated_traffic': 100,
                 'budget': 100000,
                 'impression_goal': 10
@@ -113,7 +130,7 @@ describe('Bidder test', () => {
                     .send({
                         "floor_price": 7000,
                         "timeout_ms": 100,
-                        "session_id": "1234",
+                        "session_id": session_id,
                         "user_id": "1",
                         "request_id": "1"
                     })
@@ -122,7 +139,7 @@ describe('Bidder test', () => {
                     .then((response) => {
                         expect(response.body).toEqual(
                             expect.objectContaining({
-                                session_id: "1234",
+                                session_id: session_id.toString(),
                                 request_id: "1",
                                 price: expect.any(Number)
                             })
@@ -132,10 +149,11 @@ describe('Bidder test', () => {
     })
 
     it('POST init_session -> bid_request -> notify_win_bid -> ok', async () => {
+        session_id = mathUtil.getRandomInt(10000, 20000)
         return agent
             .post('/init_session')
             .send({
-                'session_id': 1234,
+                'session_id': session_id,
                 'estimated_traffic': 100,
                 'budget': 100000,
                 'impression_goal': 10
@@ -152,7 +170,7 @@ describe('Bidder test', () => {
                     .send({
                         "floor_price": 7000,
                         "timeout_ms": 100,
-                        "session_id": "1234",
+                        "session_id": session_id,
                         "user_id": "1",
                         "request_id": "1"
                     })
@@ -161,7 +179,7 @@ describe('Bidder test', () => {
                     .then((response) => {
                         expect(response.body).toEqual(
                             expect.objectContaining({
-                                session_id: "1234",
+                                session_id: session_id.toString(),
                                 request_id: "1",
                                 price: expect.any(Number)
                             })
@@ -169,9 +187,24 @@ describe('Bidder test', () => {
                         agent
                             .post('/notify_win_bid')
                             .send({
-                                'session_id': 1234,
+                                'session_id': session_id,
                                 'request_id': 1,
                                 'clear_price': 0
+                            })
+                            .expect('Content-Type', /json/)
+                            .expect(200)
+                            .then((response) => {
+                                expect(response.body).toEqual(
+                                    expect.objectContaining({
+                                        result: 'ok'
+                                    })
+                                )
+                            })
+
+                            agent
+                            .post('/end_session')
+                            .send({
+                                'session_id': session_id
                             })
                             .expect('Content-Type', /json/)
                             .expect(200)

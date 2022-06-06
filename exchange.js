@@ -66,7 +66,7 @@ app.post('/init_session',
         if (!!session) { // if existed
             return res.status(400).json({ error: `session_id ${session_id} has already initialized before` });
         } else {
-            session = new Session({
+            let session = new Session({
                 session_id,
                 estimated_traffic,
                 bidders,
@@ -81,7 +81,7 @@ app.post('/init_session',
                     route = '/' + route
                 endpoints.push(bidder.endpoint + route)
             });
-            const result = await Promise.allSettled(
+            await Promise.allSettled(
                 endpoints.map((endpoint) => {
                     return axios.post(endpoint, {
                         session_id,
@@ -105,6 +105,26 @@ app.post('/end_session',
             return res.status(400).json({ error: errors.array() });
         }
         let session_id = req.body.session_id
+        let session = await Session.findOne({ session_id })
+        if (!!session) { // if existed
+            let endpoints = []
+            let bidders = session.bidders
+            bidders.forEach(bidder => {
+                let route = 'end_session'
+                if (bidder.endpoint[bidder.endpoint.length - 1] != '/')
+                    route = '/' + route
+                endpoints.push(bidder.endpoint + route)
+            });
+            await Promise.allSettled(
+                endpoints.map((endpoint) => {
+                    return axios.post(endpoint, {
+                        session_id
+                    }, { timeout: constants.DEFAULT_TIMEOUT }
+                    )
+                }
+                )
+            )
+        }
         await Session.deleteMany({ session_id })
         return res.json({ result: 'ok' })
     })

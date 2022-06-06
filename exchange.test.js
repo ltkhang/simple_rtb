@@ -1,13 +1,15 @@
 const request = require('supertest')
 const exchange = require('./exchange')
+const { mathUtil } = require('./utils')
 
 describe('Exchange test', () => {
     const agent = request.agent(exchange)
     it('POST init_session -> ok', async () => {
+        session_id = mathUtil.getRandomInt(10000, 20000)
         return agent
             .post('/init_session')
             .send({
-                "session_id": 1234,
+                "session_id": session_id,
                 "estimated_traffic": 1,
                 "bidders": [{
                     "name": "bidder1",
@@ -30,6 +32,20 @@ describe('Exchange test', () => {
                         result: 'ok'
                     })
                 )
+                agent
+                    .post('/end_session')
+                    .send({
+                        'session_id': session_id
+                    })
+                    .expect('Content-Type', /json/)
+                    .expect(200)
+                    .then((response) => {
+                        expect(response.body).toEqual(
+                            expect.objectContaining({
+                                result: 'ok'
+                            })
+                        )
+                    })
             })
     })
 
@@ -51,10 +67,11 @@ describe('Exchange test', () => {
     })
 
     it('POST init_session -> bid_request -> ok', async () => {
+        session_id = mathUtil.getRandomInt(10000, 20000)
         return agent
             .post('/init_session')
             .send({
-                "session_id": 1234,
+                "session_id": session_id,
                 "estimated_traffic": 1,
                 "bidders": [{
                     "name": "bidder1",
@@ -83,7 +100,7 @@ describe('Exchange test', () => {
                     .send({
                         "floor_price": 50,
                         "timeout_ms": 1000,
-                        "session_id": "1234",
+                        "session_id": session_id,
                         "user_id": "1",
                         "request_id": "1"
                     })
@@ -92,7 +109,7 @@ describe('Exchange test', () => {
                     .then((response) => {
                         expect(response.body).toEqual(
                             expect.objectContaining({
-                                session_id_id: '1234',
+                                session_id_id: session_id.toString(),
                                 request_id: '1',
                                 win_bid: expect.objectContaining({
                                     name: expect.any(String),
@@ -101,6 +118,20 @@ describe('Exchange test', () => {
                                 bid_responses: expect.any(Array)
                             })
                         )
+                        agent
+                            .post('/end_session')
+                            .send({
+                                'session_id': session_id
+                            })
+                            .expect('Content-Type', /json/)
+                            .expect(200)
+                            .then((response) => {
+                                expect(response.body).toEqual(
+                                    expect.objectContaining({
+                                        result: 'ok'
+                                    })
+                                )
+                            })
                     })
             })
     })
