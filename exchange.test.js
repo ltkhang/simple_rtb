@@ -96,7 +96,7 @@ describe('Exchange test', () => {
                                 request_id: '1',
                                 win_bid: expect.objectContaining({
                                     name: expect.any(String),
-                                    price: expect.any
+                                    price: expect.any(Number)
                                 }),
                                 bid_responses: expect.any(Array)
                             })

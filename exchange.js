@@ -1,4 +1,5 @@
 const express = require('express')
+const mongoose = require('mongoose')
 const cors = require('cors')
 const axios = require('axios')
 const { checkSchema, validationResult, check } = require('express-validator');
@@ -9,6 +10,8 @@ const myArgs = process.argv.slice(2)
 
 const allSettled = require('promise.allsettled');
 allSettled.shim()
+
+const Session = require('./models/ExchangeSession')
 
 const PORT = 3000
 let port = PORT
@@ -24,6 +27,15 @@ if (myArgs.length == 0) {
     }
 }
 
+let mongodbConnectionString = 'mongodb://root:example@localhost:27017/'
+let dbName = 'exchange'
+if (!!process.env.MONGODB_CONNECTION_STRING) {
+    mongodbConnectionString = process.env.MONGODB_CONNECTION_STRING
+    dbName = process.env.MONGODB_DB_NAME
+}
+
+
+
 // Init express instance
 const app = express()
 
@@ -38,7 +50,6 @@ app.use(generalValidation.errorHandler)
 app.use(cors())
 
 // store all session in global value as format key - value
-let session_db = {}
 
 app.post('/init_session',
     checkSchema(exchangeValidation.initSessionPostCheckSchema),
@@ -51,12 +62,18 @@ app.post('/init_session',
         let estimated_traffic = req.body.estimated_traffic
         let bidders = req.body.bidders
         let bidder_setting = req.body.bidder_setting
-        if (!(session_id in session_db)) {
-            session_db[session_id] = {
+        let session = await Session.findOne({ session_id })
+        if (!!session) { // if existed
+            return res.status(400).json({ error: `session_id ${session_id} has already initialized before` });
+        } else {
+            session = new Session({
+                session_id,
                 estimated_traffic,
                 bidders,
                 bidder_setting
-            }
+            })
+            await session.save()
+
             let endpoints = []
             bidders.forEach(bidder => {
                 let route = 'init_session'
@@ -76,21 +93,19 @@ app.post('/init_session',
                 }
                 )
             )
-            res.json({ result: 'ok'})
-        } else {
-            return res.status(400).json({ error: `session_id ${session_id} has already initialized before` });
+            res.json({ result: 'ok' })
         }
     })
 
 app.post('/end_session',
     checkSchema(generalValidation.endSessionSchemaCheck),
-    (req, res) => {
+    async (req, res) => {
         const errors = validationResult(req);
         if (!errors.isEmpty()) {
             return res.status(400).json({ error: errors.array() });
         }
         let session_id = req.body.session_id
-        delete session_db[session_id]
+        await Session.deleteMany({ session_id })
         return res.json({ result: 'ok' })
     })
 
@@ -102,16 +117,17 @@ app.post('/bid_request',
             return res.status(400).json({ error: errors.array() });
         }
         let session_id = req.body.session_id
-        if (!(session_id in session_db)) {
+        let session = await Session.findOne({ session_id })
+        if (!!!session) { // if not existed
             return res.status(400).json({ error: `session_id ${session_id} has not initialized` });
         }
 
         let floor_price = req.body.floor_price
         let timeout_ms = req.body.timeout_ms
-        
+
         let user_id = req.body.user_id
         let request_id = req.body.request_id
-        let bidders = session_db[session_id]['bidders']
+        let bidders = session['bidders']
 
 
         // inject response time: https://stackoverflow.com/a/59885486
@@ -120,7 +136,7 @@ app.post('/bid_request',
             config.headers['request-startTime'] = process.hrtime()
             return config
         })
-        
+
         instance.interceptors.response.use((response) => {
             const start = response.config.headers['request-startTime']
             const end = process.hrtime(start)
@@ -130,54 +146,54 @@ app.post('/bid_request',
         })
 
         let endpoints = []
-            bidders.forEach(bidder => {
-                let route = 'bid_request'
-                if (bidder.endpoint[bidder.endpoint.length - 1] != '/')
-                    route = '/' + route
-                endpoints.push(bidder.endpoint + route)
-            });
-            const http_result = await Promise.allSettled(
-                endpoints.map((endpoint) => {
-                    return instance.post(endpoint, {
-                        floor_price,
-                        timeout_ms,
-                        session_id,
-                        user_id,
-                        request_id
-                    }, { timeout: timeout_ms }
-                    )
-                }
+        bidders.forEach(bidder => {
+            let route = 'bid_request'
+            if (bidder.endpoint[bidder.endpoint.length - 1] != '/')
+                route = '/' + route
+            endpoints.push(bidder.endpoint + route)
+        });
+        const http_result = await Promise.allSettled(
+            endpoints.map((endpoint) => {
+                return instance.post(endpoint, {
+                    floor_price,
+                    timeout_ms,
+                    session_id,
+                    user_id,
+                    request_id
+                }, { timeout: timeout_ms }
                 )
+            }
             )
-            let winner = 0
-            let price = -1
-            let min_response = 0
-            let bid_responses = [] 
-            for (let i = 0; i < http_result.length; i++){
-                result = http_result[i]
-                if (result.status == 'fulfilled')
-                    if (result.value.status == constants.STATUS_OK){
-                        let bidder_name = bidders[i]['name']
-                        let bidder_price = result.value.data.price
-                        let bidder_response_time = result.value.headers['request-duration']
-                        
-                        if (bidder_price > -1){
-                            bid_responses.push({
-                                name: bidder_name,
-                                price: bidder_price
-                            })
+        )
+        let winner = 0
+        let price = -1
+        let min_response = 0
+        let bid_responses = []
+        for (let i = 0; i < http_result.length; i++) {
+            result = http_result[i]
+            if (result.status == 'fulfilled')
+                if (result.value.status == constants.STATUS_OK) {
+                    let bidder_name = bidders[i]['name']
+                    let bidder_price = result.value.data.price
+                    let bidder_response_time = result.value.headers['request-duration']
 
-                            if ((bidder_price > price) || (bidder_price == price && bidder_response_time < min_response)){
-                                winner = i
-                                price = bidder_price
-                                min_response = bidder_response_time
-                            }
+                    if (bidder_price > -1) {
+                        bid_responses.push({
+                            name: bidder_name,
+                            price: bidder_price
+                        })
+
+                        if ((bidder_price > price) || (bidder_price == price && bidder_response_time < min_response)) {
+                            winner = i
+                            price = bidder_price
+                            min_response = bidder_response_time
                         }
                     }
-            }
+                }
+        }
 
         let name = ""
-        if (price > -1){
+        if (price > -1) {
             name = bidders[winner]['name']
             let endpoint = bidders[winner]['endpoint']
             let route = 'notify_win_bid'
@@ -189,9 +205,9 @@ app.post('/bid_request',
                     session_id,
                     request_id,
                     clear_price: price
-                }, {timeout: constants.DEFAULT_TIMEOUT})
+                }, { timeout: constants.DEFAULT_TIMEOUT })
             } catch {
-                
+
             }
         }
         let win_bid = {
@@ -207,8 +223,10 @@ app.post('/bid_request',
     }
 )
 
-app.listen(port, () => {
-    console.log(`Bidder server listening on port ${port}`)
-})
+mongoose.connect(mongodbConnectionString, { dbName }).then(() => {
+    app.listen(port, () => {
+        console.log(`Exchange server listening on port ${port}`)
+    })
+}).catch((e) => console.log(`Connect DB failed! Error: ${e.message}`))
 
 module.exports = app
