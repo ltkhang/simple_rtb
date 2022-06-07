@@ -15,7 +15,9 @@
     "promise.allsettled": "^1.0.5"
   },
   "scripts": {
-    "test": "jest --watchAll"
+    "test": "jest --watchAll",
+    "startExchange": "node exchange.js",
+    "startBidder": "node bidder.js"
   },
   "devDependencies": {
     "async": "^3.2.3",
