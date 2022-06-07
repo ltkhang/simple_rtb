@@ -123,6 +123,8 @@ app.post('/bid_request',
         let total_spending = session.total_spending
         let impression_count = session.impression_count
 
+        let max_price = budget - total_spending
+
         let estimated_number_of_bidder = estimated_traffic / impression_goal
 
         // divide remain budget for remain impression
@@ -136,6 +138,8 @@ app.post('/bid_request',
         if (isNaN(price) || !isFinite(price) || price < floor_price) {
             price = -1 // no bid
         }
+        if (price > max_price)
+            price = -1
 
         let request_obj = await Request.findOne({session_id, request_id})
         if (!!!request_obj) { // if not existed
