@@ -160,3 +160,13 @@ valuation = budget / impression_goal
 ### Bidder server
 
 ![](images/bidder.png)
+
+# Benchmark capacity
+
+The test client is written in python for parallel call api with threading programming
+
+To run stress test (python3):
+
+- ```cd client```
+- ```pip install -r requirements.txt``` to install library of python
+- ```python client.py```

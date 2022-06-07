@@ -60,5 +60,41 @@ services:
       - mongo
     ports:
       - '10002:4000'
+
+  bidder3:
+    build:
+      context: .
+      dockerfile: bidder.Dockerfile
+    environment:
+      - MONGODB_CONNECTION_STRING=mongodb://root:root@mongo:27017/
+      - MONGODB_DB_NAME=bidder3
+    depends_on:
+      - mongo
+    ports:
+      - '10003:4000'
+
+  bidder4:
+    build:
+      context: .
+      dockerfile: bidder.Dockerfile
+    environment:
+      - MONGODB_CONNECTION_STRING=mongodb://root:root@mongo:27017/
+      - MONGODB_DB_NAME=bidder4
+    depends_on:
+      - mongo
+    ports:
+      - '10004:4000'
+
+  bidder5:
+    build:
+      context: .
+      dockerfile: bidder.Dockerfile
+    environment:
+      - MONGODB_CONNECTION_STRING=mongodb://root:root@mongo:27017/
+      - MONGODB_DB_NAME=bidder5
+    depends_on:
+      - mongo
+    ports:
+      - '10005:4000'
   
 
