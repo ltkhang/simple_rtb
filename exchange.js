@@ -5,7 +5,7 @@ const axios = require('axios')
 const { checkSchema, validationResult, check } = require('express-validator');
 const { exchangeValidation, generalValidation } = require('./validation')
 const res = require('express/lib/response');
-const { mathUtil, constants } = require('./utils')
+const { mathUtil, constants, validationUtil } = require('./utils')
 const myArgs = process.argv.slice(2)
 
 const allSettled = require('promise.allsettled');
@@ -62,9 +62,15 @@ app.post('/init_session',
         let estimated_traffic = req.body.estimated_traffic
         let bidders = req.body.bidders
         let bidder_setting = req.body.bidder_setting
+
+        // check bidder name duplicated, discussed in 1st interview, open question => solution: reject initializing session
+        let bidderNameList = bidders.map((bidder) => bidder.name)
+        if (validationUtil.checkDuplicationArraryValues(bidderNameList))
+            return res.status(constants.STATUS_ERR).json({ error: `bidder name duplicated` })
+
         let session = await Session.findOne({ session_id })
         if (!!session) { // if existed
-            return res.status(400).json({ error: `session_id ${session_id} has already initialized before` });
+            return res.status(constants.STATUS_ERR).json({ error: `session_id ${session_id} has already initialized before` })
         } else {
             let session = new Session({
                 session_id,
@@ -213,6 +219,9 @@ app.post('/bid_request',
         }
 
         let name = ""
+        // check if bid price greater or equal to floor_price to prevent bidder from breaking the rules, mentioned in 1st interview
+        if (price < floor_price)
+            price = -1
         if (price > -1) {
             name = bidders[winner]['name']
             let endpoint = bidders[winner]['endpoint']

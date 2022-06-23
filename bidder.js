@@ -34,7 +34,7 @@ if (!!process.env.MONGODB_CONNECTION_STRING) {
 
 console.log(dbName)
 
-
+// extension validator.js
 // Init express instance
 const app = express()
 
@@ -63,6 +63,8 @@ app.post('/init_session',
         let budget = req.body.budget
         let impression_goal = req.body.impression_goal
 
+        let estimated_number_of_bidder = estimated_traffic / impression_goal
+
         let session = await Session.findOne({ session_id })
         if (!!session) { // if existed
             return res.status(400).json({ error: `session_id ${session_id} has already initialized before` });
@@ -72,6 +74,7 @@ app.post('/init_session',
                 estimated_traffic,
                 budget,
                 impression_goal,
+                estimated_number_of_bidder,
                 total_spending: 0, // total amount of winning bid
                 impression_count: 0, // number of winning bid
             })
@@ -110,14 +113,14 @@ app.post('/bid_request',
         // check if session_id has been initialized
         let session = await Session.findOne({ session_id })
         if (!!!session) { // if not existed
-            return res.status(400).json({ error: `session_id ${session_id} has not initialized` });
+            return res.status(constants.STATUS_ERR).json({ error: `session_id ${session_id} has not initialized` });
         }
 
         // store the information of user
         // if (!(user_id in session_db[session_id].users)) {
         //     session_db[session_id].users[user_id] = {}
         // }
-        let estimated_traffic = session.estimated_traffic
+        // let estimated_traffic = session.estimated_traffic
         let budget = session.budget
         let impression_goal = session.impression_goal
         let total_spending = session.total_spending
@@ -125,10 +128,13 @@ app.post('/bid_request',
 
         let max_price = budget - total_spending
 
-        let estimated_number_of_bidder = estimated_traffic / impression_goal
+        let estimated_number_of_bidder = session.estimated_number_of_bidder // estimated_traffic / impression_goal => upgrade from 1st interview
 
         // divide remain budget for remain impression
         let valuation = (budget - total_spending) / (impression_goal - impression_count)
+        // M / 10 = valuation - willing to pay 
+        // 10 impr - 1000 budget -> max at 100
+        // valuation_user = acctual_valuation / num_user
 
         // or bid based on theory, 
         // ref: https://python.quantecon.org/two_auctions.html
@@ -152,7 +158,6 @@ app.post('/bid_request',
             request_obj.price = price
         }
         await request_obj.save()
-
 
         return res.json({
             session_id,
